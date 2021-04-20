@@ -1,0 +1,106 @@
+from openpyxl import load_workbook
+import pandas as pd
+import yaml
+import collections
+
+src_file = "C:\\Users\\DELL\\Documents\\ED_RHEL_English.xlsx"
+
+list_of_rowdict = []
+
+
+def generate_yaml(task_dict):
+    out_file = open('stat_all_env.yml', "w")
+    for task in task_dict:
+        out_file.write(yaml.dump(task, default_flow_style=False,sort_keys=False ))
+    out_file.close()
+    print("YAML generated successfully...!")
+
+def generate_stat_task(tab_dict, env_list, spec):
+    list_of_stats = []
+    stat_task = {}
+    file_attr = { "path": "{{ item.path }}", "owner": "{{ item.owner }}", "group": "{{ item.group }}", "mode": "{{ item.mode }}"}
+    stat_task["name"] = 'Change File Ownership, Group and Permission'
+    stat_task["ansible.builtin.file"] = file_attr
+    for lo in tab_dict:
+        list_of_rowdict.append(lo)
+    stat_task['loop'] = list_of_rowdict
+    list_of_stats.append(stat_task)
+    return list_of_stats
+
+def get_table_envlist(row_val, max_col_val):
+    envlist = []
+    for col_index in range(2,max_col_val+3):
+        if sheet.cell(row=row_val, column=col_index).value != None and ('env' in sheet.cell(row=row_val, column=col_index).value):
+            envlist.append(sheet.cell(row=row_val, column=col_index).value)
+    return envlist
+
+def get_table_dimentions(row_val, max_col):
+    col_count = 0
+    row_count = 0
+    for col_index in range(2,max_col):
+        #if sheet.cell(row=row_val, column=col_index).value != None:
+       col_count = col_count +1
+
+    for row_index in range(row_val+1, sheet.max_row + 1):
+        if sheet.cell(row=row_index, column=2).value != None:
+            row_count = row_count +1
+        else:
+            break
+    print("Dataframe starts at row: " +str(row_val))
+    print("Max Rows : " +str(row_count))
+    return row_val,row_count,col_count
+
+def create_dataframe(tabledata):
+    dataframe = pd.DataFrame.from_dict(tabledata)
+    return dataframe
+
+def get_table_data(row,row_count,col_count):
+    table_dict = {}
+    for col in range(2, col_count+3):
+        col_val_list = []
+        col_header = sheet.cell(row=row, column=col).value
+        if sheet.cell(row=row, column=col).value != None:
+            for r in range(row+1,row+row_count+1):
+                col_val_list.append(sheet.cell(row=r, column=col).value)
+            table_dict[col_header] = col_val_list
+
+    return table_dict
+
+def get_table_dict(row,row_count,col_count):
+    tab_row_list = []
+    for r in range(row+1, row+row_count+1):
+        row_dict = {}
+        for col in range(2, col_count+3):
+            col_header = sheet.cell(row=row, column=col).value
+            if sheet.cell(row=r, column=col).value != None and col_header != None and col_header != 'No':
+                if 'env' not in col_header:
+                    row_dict[col_header] = sheet.cell(row=r, column=col).value
+        tab_row_list.append(row_dict)
+    return tab_row_list
+
+wb = load_workbook(filename = src_file)
+
+sheet = wb.active
+sheet_max_col = sheet.max_column
+table_count = 1
+table_dimensions = ()
+
+for row_index in range(1, sheet.max_row+1):
+    spec_type = sheet.cell(row=row_index, column=1).value
+    if spec_type != None:
+        spec = spec_type[4:]
+        table_dimensions = get_table_dimentions(row_index,sheet_max_col)  # 1 is column index; it starts from 1st col
+        print("Table Dimension : " + str(table_dimensions))
+
+        env_list = get_table_envlist(row_index, table_dimensions[2])
+        print("Env List : " + str(env_list))
+
+        #table_data = get_table_data(*table_dimensions)
+        if spec == 'stat':
+            table_dictionary = get_table_dict(table_dimensions[0],table_dimensions[1],table_dimensions[2])
+            print("Dictionary : " + str(table_dictionary))
+
+            stat_task = generate_stat_task(table_dictionary,env_list,spec)
+            print(stat_task)
+            generate_yaml(stat_task)
+        print("============================================\n")
